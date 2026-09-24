@@ -1,17 +1,18 @@
 {
-    "name": "terabox-dl-ts",
-    "version": "1.0.0",
-    "description": "TeraBox Downloader API",
-    "main": "src/index.ts",
-    "scripts": {
-        "start": "bun src/index.ts",
-        "dev": "bun --watch src/index.ts"
-    },
-    "dependencies": {
-        "axios": "^1.6.0"
-    },
-    "devDependencies": {
-        "@types/bun": "^1.1.0",
-        "typescript": "^5.0.0"
-    }
+  "name": "terabox-dl-api",
+  "version": "2.0.0",
+  "description": "TeraBox direct download metadata API for Vercel",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
 }
