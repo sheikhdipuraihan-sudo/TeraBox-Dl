@@ -6,24 +6,17 @@ const USER_AGENT =
 export async function tera(surl: string): Promise<any> {
   const shortUrl = surl.startsWith("1") ? surl.substring(1) : surl;
   const cookies = loadCookies();
-  const cookieString = cookies.ndus ? `ndus=${cookies.ndus}` : "";
+  const cookieString = Object.entries(cookies).map(([key, value]) => `${key}=${value}`).join("; ");
   const headers: Record<string, string> = { "User-Agent": USER_AGENT };
   if (cookieString) headers.Cookie = cookieString;
 
   const firstUrl = `https://dm.terabox.app/sharing/link?surl=${encodeURIComponent(surl)}`;
   const response = await fetch(firstUrl, { headers });
   const text = await response.text();
-  if (!response.ok) {
-    return { error: `TeraBox page request failed with HTTP ${response.status}` };
-  }
+  if (!response.ok) return { error: `TeraBox page request failed with HTTP ${response.status}` };
 
   const match = text.match(/fn%28%22(.*?)%22%29/);
-  if (!match) {
-    return {
-      error:
-        "Failed to extract jsToken. TeraBox may require a current COOKIE_JSON value or may have blocked the request.",
-    };
-  }
+  if (!match) return { error: "Failed to extract jsToken. TeraBox may require a current authenticated cookie." };
 
   const apiUrl = new URL("https://dm.terabox.app/share/list");
   apiUrl.searchParams.set("app_id", "250528");
@@ -44,8 +37,6 @@ export async function tera(surl: string): Promise<any> {
   if (cookieString) apiHeaders.Cookie = cookieString;
 
   const apiResponse = await fetch(apiUrl, { headers: apiHeaders });
-  if (!apiResponse.ok) {
-    return { error: `TeraBox metadata request failed with HTTP ${apiResponse.status}` };
-  }
+  if (!apiResponse.ok) return { error: `TeraBox metadata request failed with HTTP ${apiResponse.status}` };
   return await apiResponse.json();
 }
