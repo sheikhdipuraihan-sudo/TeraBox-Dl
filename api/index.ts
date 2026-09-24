@@ -1,9 +1,8 @@
-import { tera } from "../src/lib/terabox";
+import { resolveViaPublicResolver, tera } from "../src/lib/terabox";
 import { extractSurl, formatBytes, isValidShareUrl } from "../src/lib/utils";
 
 const cache = new Map<string, { data: any; expiry: number }>();
 const CACHE_DURATION = 2 * 60 * 60 * 1000;
-
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -21,16 +20,9 @@ function sendJson(res: any, status: number, body: unknown): void {
 async function resolveDownloadUrl(dlink: unknown): Promise<string | null> {
   if (typeof dlink !== "string" || !dlink) return null;
   try {
-    const response = await fetch(dlink, {
-      method: "HEAD",
-      redirect: "manual",
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    const location = response.headers.get("location");
-    return location || dlink;
-  } catch {
-    return dlink;
-  }
+    const response = await fetch(dlink, { method: "HEAD", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0" } });
+    return response.headers.get("location") || dlink;
+  } catch { return dlink; }
 }
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -51,13 +43,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     sendJson(res, 400, { status: "error", message: "Missing required parameter: url" });
     return;
   }
-
   const targetUrl = targetUrlRaw.trim();
   if (!isValidShareUrl(targetUrl)) {
     sendJson(res, 400, { status: "error", message: "Invalid TeraBox share URL" });
     return;
   }
-
   const surl = extractSurl(targetUrl);
   if (!surl) {
     sendJson(res, 400, { status: "error", message: "Could not extract surl from URL" });
@@ -67,11 +57,8 @@ export default async function handler(req: any, res: any): Promise<void> {
   const startTime = Date.now();
   try {
     const cached = cache.get(surl);
-    let data = cached && Date.now() < cached.expiry ? cached.data : await tera(surl);
-    if (!cached || Date.now() >= cached.expiry) {
-      cache.set(surl, { data, expiry: Date.now() + CACHE_DURATION });
-    }
-
+    const data = cached && Date.now() < cached.expiry ? cached.data : await tera(surl);
+    if (!cached || Date.now() >= cached.expiry) cache.set(surl, { data, expiry: Date.now() + CACHE_DURATION });
     if (data?.error) {
       sendJson(res, 502, { status: "error", message: data.error });
       return;
@@ -79,24 +66,38 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     const firstItem = data?.list?.[0];
     if (!firstItem) {
+      sendJson(res, 502, { status: "error", message: "TeraBox returned no file metadata" });
+      return;
+    }
+
+    let download = await resolveDownloadUrl(firstItem.dlink);
+    let resolver = download ? "terabox" : null;
+    if (!download) {
+      const publicDlink = await resolveViaPublicResolver(surl);
+      download = await resolveDownloadUrl(publicDlink);
+      if (download) resolver = "public-resolver";
+    }
+
+    if (!download) {
       sendJson(res, 502, {
         status: "error",
-        message: "TeraBox returned no downloadable file. A current COOKIE_JSON may be required.",
+        message: "No direct download link was returned by TeraBox or the public resolver",
+        filename: firstItem.server_filename || null,
       });
       return;
     }
 
-    const download = await resolveDownloadUrl(firstItem.dlink);
     sendJson(res, 200, {
       status: "success",
       filename: firstItem.server_filename || null,
       size: firstItem.size !== undefined ? formatBytes(firstItem.size) : null,
       download,
       thumbnail: firstItem.thumbs?.url3 || firstItem.thumbs?.url1 || null,
+      resolver,
       response_time: `${((Date.now() - startTime) / 1000).toFixed(3)}s`,
     });
   } catch (error) {
     console.error("TeraBox request failed", error);
-    sendJson(res, 500, { status: "error", message: "Unable to fetch TeraBox file" });
+    sendJson(res, 500, { status: "error", message: "Unable to resolve TeraBox file" });
   }
 }
