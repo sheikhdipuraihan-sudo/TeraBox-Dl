@@ -1,4 +1,4 @@
-import { resolveViaPublicResolver, tera } from "../src/lib/terabox";
+import { resolveOfficialDownload, resolveViaPublicResolver, tera } from "../src/lib/terabox";
 import { extractSurl, formatBytes, isValidShareUrl } from "../src/lib/utils";
 
 const cache = new Map<string, { data: any; expiry: number }>();
@@ -72,6 +72,10 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     let download = await resolveDownloadUrl(firstItem.dlink);
     let resolver = download ? "terabox" : null;
+    if (!download) {
+      download = await resolveOfficialDownload(firstItem.fs_id);
+      if (download) resolver = "terabox-official";
+    }
     if (!download) {
       const publicDlink = await resolveViaPublicResolver(surl);
       download = await resolveDownloadUrl(publicDlink);
